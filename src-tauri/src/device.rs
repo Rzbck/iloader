@@ -185,11 +185,23 @@ pub async fn get_provider_from_connection(
     device_info: &DeviceInfo,
     connection: &mut UsbmuxdConnection,
 ) -> Result<UsbmuxdProvider, AppError> {
-    let device = connection
-        .get_device(&device_info.udid)
-        .await
-        .map_err(|e| {
-            AppError::DeviceComsWithMessage("Failed to get device".into(), e.to_string())
+    let devices = connection.get_devices().await.map_err(|e| {
+        AppError::DeviceComsWithMessage("Failed to list devices".into(), e.to_string())
+    })?;
+
+    let device = devices
+        .into_iter()
+        .find(|device| {
+            device.device_id == device_info.id && device.udid == device_info.udid
+        })
+        .ok_or_else(|| {
+            AppError::DeviceComsWithMessage(
+                "Selected device connection is no longer available".into(),
+                format!(
+                    "Expected usbmuxd device id {} for {} ({})",
+                    device_info.id, device_info.udid, device_info.connection_type
+                ),
+            )
         })?;
 
     let provider = device.to_provider(UsbmuxdAddr::from_env_var().unwrap(), "iloader");
