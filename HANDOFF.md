@@ -321,3 +321,114 @@ Do not rebuild or modify the app yet.
 In `Rzbck/isideload`, inspect the exact Watch profile request/response path around `download_team_provisioning_profile` / App ID profile creation and the `DeveloperDeviceType::Watchos` request marker. Compare the actual Watch request parameters against the iOS profile request and determine why the returned embedded profile is still an iOS-family profile.
 
 Only after that evidence should a new isideload code patch be made and pinned into a new exact-SHA iLoader build for physical retest.
+
+## Update - Watch pairing succeeded; failure advanced to installation_proxy forwarding
+
+Date: **2026-09-09**
+
+### Exact physically tested build
+
+iLoader:
+
+`ce868720316adf1b92b4fb1083db2f230f36f7ca`
+
+Pinned isideload:
+
+`367d24c6443897d586493128bef0210203525157`
+
+iLoader CI:
+
+`34403672997` — SUCCESS.
+
+Exact Windows setup SHA-256 physically used:
+
+`390667937EC44A9D820D217183F46F6F263003E8C574B981EFC6E16CB68E58F7`
+
+Regression IPA:
+
+`WatchSensorLab-companion-unsigned-f539fe4105df.ipa`
+
+### Physical result
+
+The iPhone application installs successfully.
+
+The previous failure at the initial Watch lockdown forwarding stage is gone.
+
+First attempt:
+
+- real Apple Watch displayed a pairing/trust request;
+- user accidentally denied it;
+- isideload failed with:
+  `Failed to pair with the Apple Watch through companion proxy`
+  `user denied pairing trust`.
+
+After restarting the Watch and repeating the exact test:
+
+- pairing/trust prompt appeared again;
+- user accepted;
+- Watch pairing succeeded;
+- installation advanced further.
+
+New physical failure:
+
+`Failed to forward Apple Watch installation proxy`
+
+`watch_install.rs:193`
+
+`device socket io failed`
+
+This proves that the exact `367d24c...` backend physically reached all of the following:
+
+1. iPhone install;
+2. Watch lockdownd forwarding;
+3. forwarded Watch lockdown connection;
+4. real Watch pairing/trust;
+5. Watch lockdown session;
+6. start of `com.apple.mobile.installation_proxy`.
+
+The failure happens when the same persistent CompanionProxy connection is reused for the next `StartForwardingServicePort`.
+
+### Root-cause-directed backend patch
+
+The working pymobiledevice3 implementation opens a fresh
+`com.apple.companion_proxy` lockdown service connection for each forwarding
+start/stop command.
+
+isideload has now been changed to follow that model instead of reusing one
+persistent CompanionProxy socket.
+
+New isideload SHA:
+
+`9d43554571360cb27c701efbe1fbd1f5456769ae`
+
+Commit:
+
+`fix(watch): refresh companion proxy per forward`
+
+isideload CI:
+
+- run `34405740552`;
+- exact SHA `9d43554571360cb27c701efbe1fbd1f5456769ae`;
+- Windows SUCCESS;
+- macOS SUCCESS;
+- Ubuntu SUCCESS.
+
+This new backend is CI-validated but NOT physically validated yet.
+
+### Next exact step
+
+Pin iLoader to `9d43554571360cb27c701efbe1fbd1f5456769ae`,
+build an exact-SHA Windows installer, install it, then repeat the SAME
+`f539fe...` IPA test on the same iPhone + Apple Watch.
+
+Expected progression:
+
+- if installation_proxy forwarding now succeeds, observe whether execution
+  reaches `streaming_zip_conduit`;
+- if streaming_zip_conduit completes, verify the Watch app actually installs
+  and launches;
+- if any failure remains, record the exact new isideload context/line and
+  physical Watch state before making another change.
+
+Do NOT declare the automatic one-click Watch path fixed until the real Watch
+app installs and launches physically.
