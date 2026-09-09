@@ -149,3 +149,33 @@ Continue the Windows companion-device investigation:
 - `main` in this fork without explicit approval;
 - `Rzbck/ios-godot-lab` from this tooling chantier;
 - hard-coded user Team IDs or WatchSensorLab-specific names in generic tooling logic.
+
+## Update - explicit Watch signing backend pinned in iLoader
+
+Exact tested iLoader code SHA: 045caa99d3122cd2bcba878588b1678a9cf5f6dc
+Commit: build(watch): pin explicit Watch bundle signing backend
+
+Pinned isideload backend:
+dd4109c6ead22823f956e3f0f20d480e4b9965df
+
+CI run: 34386364284
+
+- Windows: SUCCESS; build PASS; Windows EXE upload PASS.
+- macOS: SUCCESS; build PASS; DMG upload PASS.
+- Linux ARM: successful builds/artifacts.
+- Ubuntu x64 jobs: failed before build during apt-get update.
+- Ubuntu x64 failure is external: Google Chrome apt repository Hash Sum mismatch.
+
+Exact Windows artifact:
+- name: windows-exe
+- artifact ID: 10118032239
+- artifact ZIP digest: sha256:437e6131cf44c9af193bf2e42c57db484a5a9caeb93b69fb457990da6e95f665
+
+This build has NOT yet been physically validated on iPhone or Apple Watch.
+
+Next exact step:
+1. Download the exact Windows artifact from run 34386364284.
+2. Install that exact iLoader build.
+3. Reinstall the same Watch Sensor Lab IPA.
+4. Verify iPhone launch.
+5. Verify whether the Watch companion installs and launches instead of remaining a placeholder.
