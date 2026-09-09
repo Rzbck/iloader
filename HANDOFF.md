@@ -179,3 +179,38 @@ Next exact step:
 3. Reinstall the same Watch Sensor Lab IPA.
 4. Verify iPhone launch.
 5. Verify whether the Watch companion installs and launches instead of remaining a placeholder.
+
+## Physical validation - explicit Watch signing build
+
+Exact Windows installer physically used:
+
+- iLoader code SHA: `045caa99d3122cd2bcba878588b1678a9cf5f6dc`
+- pinned isideload SHA: `dd4109c6ead22823f956e3f0f20d480e4b9965df`
+- run: `34386364284`
+- setup path: `E:\_Project\IOS APP\_Tools\iloader-watch\artifacts\045caa99d3122cd2bcba878588b1678a9cf5f6dc\nsis\iloader_2.3.1_x64-setup.exe`
+- setup SHA-256: `F97E4349EAE12F7D2275E6DC5A84C7DDE6B347F52C779689DD62166BD8703915`
+
+Physical result after uninstalling the previous iPhone app and reinstalling the SAME Watch Sensor Lab IPA with this build:
+
+- iPhone app is reinstalled successfully: **physically validated**;
+- iLoader reports signing/install complete;
+- Apple Watch installation still does **not** finalize;
+- Watch installation database still reports the Watch Sensor Lab bundle as `IsPlaceholder = True`;
+- Watch `SequenceNumber` changed from the previous observed value `1501` to `1505`;
+- Watch data-container UUID and bundle-installation path also changed.
+
+Interpretation:
+
+- the new installation attempt definitely reached watchOS and refreshed/recreated the Watch placeholder;
+- this is not merely a stale previous placeholder;
+- however the real Watch app still failed to finalize installation;
+- therefore the explicit nested Watch `sign_bundle()` patch at `dd4109c...` did **not** resolve the physical integrity/install failure by itself.
+
+Current exact Watch record includes:
+
+- bundle ID: `com.rzbck.watchsensorlab.59858TV9N2.watchkitapp`
+- `SequenceNumber = 1505`
+- `IsPlaceholder = True`
+- `CFBundleShortVersionString = 0.1.0`
+
+Next exact diagnostic step: capture the Apple Watch-side installation/syslog error during a fresh install attempt, using the existing Windows `pymobiledevice3` Watch proxy/lockdown path, so the next code change is based on the actual watchOS rejection reason rather than another signing hypothesis.
