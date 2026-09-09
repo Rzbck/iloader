@@ -214,3 +214,110 @@ Current exact Watch record includes:
 - `CFBundleShortVersionString = 0.1.0`
 
 Next exact diagnostic step: capture the Apple Watch-side installation/syslog error during a fresh install attempt, using the existing Windows `pymobiledevice3` Watch proxy/lockdown path, so the next code change is based on the actual watchOS rejection reason rather than another signing hypothesis.
+
+## Update - Watch diagnostics, fresh placeholder and exact signed bundle capture
+
+Further Windows diagnostics were completed without changing iLoader or the application code.
+
+### Watch service access
+
+Using `pymobiledevice3 11.12.0` through the existing iPhone CompanionProxy / Watch lockdown forwarding path:
+
+- Watch connection is healthy: `Watch7,14 / watchOS 26.6`;
+- `OsTraceService.get_pid_list()` succeeds and returned **358 processes**;
+- relevant Watch processes observed include `amfid`, `appconduitd`, `appstored`, `installcoordinationd`, `installd`, `misagent`, and `securityd`;
+- global `OsTraceService.syslog()` produced no entries, including with `PROMISCUOUS`;
+- classic `SyslogService` also produced no usable log lines;
+- per-PID targeted os_trace capture during a real reinstall also produced a **0-byte** capture file.
+
+Conclusion: live Watch syslog streaming through this forwarded lockdown path is not currently usable for this diagnosis. Do not spend more time filtering the empty captures.
+
+### Fresh physical reinstall while targeted capture was active
+
+The user reinstalled the SAME `WatchSensorLab-companion-unsigned-f539fe4105df.ipa` with the exact experimental iLoader build.
+
+After that attempt, the Watch installation DB reported:
+
+- bundle ID: `com.rzbck.watchsensorlab.59858TV9N2.watchkitapp`;
+- `SequenceNumber = 1509` (previously `1505`);
+- a new data-container UUID;
+- a new bundle-installation path;
+- **`IsPlaceholder = True` remains unchanged**.
+
+The Watch UI wording during this attempt changed to approximately **“Impossible d’installer Watch Sensor Lab — Réessayer ultérieurement”**. Treat this only as a UI wording variation; the installation DB is definitive and still proves the real Watch app did not finalize.
+
+This confirms again that the latest attempt reached/updated watchOS and is not a stale placeholder.
+
+### Exact signed bundle captured before iLoader cleanup
+
+Because isideload deletes the temporary signed app after installation, a local watcher copied the exact signed app bundle before cleanup.
+
+Captured path:
+
+`E:\_Project\IOS APP\_Tools\pymobiledevice3-watch\signed-captures\WatchSensorLab-signed-20260909_205028.app`
+
+This copy corresponds to the same `f539fe...` IPA re-signed by the physically tested experimental iLoader path.
+
+The embedded Watch app contains all of the files expected from the explicit Watch signing pass:
+
+- `Watch\WatchSensorLabWatch.app\Info.plist`;
+- `Watch\WatchSensorLabWatch.app\embedded.mobileprovision`;
+- `Watch\WatchSensorLabWatch.app\_CodeSignature\CodeResources`;
+- `Watch\WatchSensorLabWatch.app\WatchSensorLabWatch` executable.
+
+Observed file sizes:
+
+- Watch `embedded.mobileprovision`: **12720 bytes**;
+- Watch `CodeResources`: **2182 bytes**;
+- Watch executable: **371759 bytes**.
+
+This is direct evidence that `dd4109c...` now embeds a profile and produces a Watch bundle signature; however physical installation still fails, so presence of these files alone is not sufficient.
+
+### Exact Info.plist / provisioning inspection
+
+From the captured signed bundle:
+
+- main bundle ID: `com.rzbck.watchsensorlab.59858TV9N2`;
+- Watch bundle ID: `com.rzbck.watchsensorlab.59858TV9N2.watchkitapp`;
+- `WKCompanionAppBundleIdentifier` matches the rewritten main bundle ID: **true**;
+- `WKApplication = true`;
+- `WKRunsIndependentlyOfCompanionApp = false`;
+- `CFBundleExecutable = WatchSensorLabWatch`;
+- `DTPlatformName = watchos`;
+- `MinimumOSVersion = 10.0`;
+- `UIDeviceFamily = [4]`.
+
+Embedded Watch provisioning profile:
+
+- profile name: `iOS Team Provisioning Profile: com.rzbck.watchsensorlab.59858TV9N2.watchkitapp`;
+- profile `Platform` array: **`['iOS', 'xrOS', 'visionOS']`**;
+- **`watchOS` is absent from the profile Platform array**;
+- expiration: `2026-09-16 18:50:59`;
+- `ProvisionedDevices` count: **2**;
+- the physical paired Watch UDID is present in `ProvisionedDevices`: **true**;
+- profile `application-identifier` matches the rewritten Watch bundle: **true**;
+- profile team identifier matches: **true**;
+- `get-task-allow = true`.
+
+### Current strongest root-cause candidate — NOT YET PROVEN
+
+The previous hypotheses about missing Watch registration, companion ID rewrite, missing Watch signing pass, and Developer Mode have now all been substantially narrowed or disproved:
+
+- physical Watch UDID **is** in the embedded profile;
+- companion ID is correct;
+- Watch app has `WKApplication = true`;
+- Watch app now has `embedded.mobileprovision`, `_CodeSignature`, and a signed executable path;
+- Developer Mode is enabled;
+- yet watchOS still leaves the app as a placeholder.
+
+The strongest new evidence is that the profile downloaded/embedded for the Watch bundle is still identified as an **iOS Team Provisioning Profile** and its `Platform` list contains `iOS/xrOS/visionOS` but not `watchOS`, even though the bundle itself is a watchOS app and isideload requests Watch-specific routing.
+
+Do **not** declare this the final root cause yet. The next code investigation must verify whether the Apple Developer Services request used for the Watch profile is actually requesting/returning the correct watchOS profile type, and whether the `Platform` field is expected to contain `watchOS` for a valid modern Watch development profile.
+
+## Next exact step after this update
+
+Do not rebuild or modify the app yet.
+
+In `Rzbck/isideload`, inspect the exact Watch profile request/response path around `download_team_provisioning_profile` / App ID profile creation and the `DeveloperDeviceType::Watchos` request marker. Compare the actual Watch request parameters against the iOS profile request and determine why the returned embedded profile is still an iOS-family profile.
+
+Only after that evidence should a new isideload code patch be made and pinned into a new exact-SHA iLoader build for physical retest.
