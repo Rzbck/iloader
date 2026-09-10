@@ -10,14 +10,14 @@ Preserve the exact result of the Windows one-click iPhone + Apple Watch companio
 
 - repository: `Rzbck/iloader`
 - branch: `feat/watch-companion-support-20260909`
-- physically validated iLoader application commit: `70f37e9b4afc659ab44ec1944c034093f4cda416`
+- physically validated iLoader source revision: `70f37e9b4afc659ab44ec1944c034093f4cda416`
 - later commits on this branch may be documentation-only; always verify current HEAD before source changes.
 
 Matching backend used by the validated build:
 
 - repository: `Rzbck/isideload`
 - branch: `feat/watch-companion-support-20260909`
-- pinned backend revision in the physically validated iLoader build: `f7b9f3da570edd6824c29680545e710846d07df5`
+- pinned backend revision: `f7b9f3da570edd6824c29680545e710846d07df5`
 
 ## Physical result
 
@@ -25,7 +25,7 @@ The one-click path was validated on real hardware:
 
 - the iPhone IPA installs;
 - the iPhone app launches;
-- the embedded Apple Watch companion is discovered/provisioned/signed;
+- the embedded Apple Watch companion is discovered, provisioned and signed;
 - the paired Watch receives the app;
 - the Watch app installs and launches physically.
 
@@ -47,29 +47,19 @@ Do not conflate this with build-only or CI-only evidence.
 - provisions/signs the Watch bundle explicitly;
 - includes the paired Watch in provisioning where required;
 - handles watchOS platform/profile selection in the validated flow;
-- preserves capability-aware provisioning including HealthKit-related bundles.
+- preserves capability-aware provisioning including the tested HealthKit path.
 
 ## Public/project separation
 
 The Watch Tracker application and its Health/GPS/activity data are not part of this project and must not be copied into a public Watch-sideloading repository.
 
-Public-facing work should be application-agnostic. Remove or generalize:
-
-- local Windows paths;
-- tracker-specific bundle identifiers;
-- physical device identifiers;
-- temporary diagnostic artifacts;
-- investigation comments that do not explain a permanent invariant.
+Public-facing work should be application-agnostic. Remove or generalize local paths, tracker-specific bundle identifiers, physical device identifiers, temporary diagnostic artifacts and investigation comments that do not explain a permanent invariant.
 
 Never commit certificates, private keys, provisioning profiles or Apple credentials.
 
 ## Clean publication entry point
 
-Read:
-
-`docs/WATCH_COMPANION_PORTING_NOTES.md`
-
-That document is the preferred starting point for a new publication/upstream-review conversation. Use the older `HANDOFF.md` only when investigation chronology is needed.
+Read `docs/WATCH_COMPANION_PORTING_NOTES.md` first. Use the older `HANDOFF.md` only when investigation chronology is needed.
 
 ## Dedicated public repository
 
@@ -77,7 +67,7 @@ The user wants a separate public repository as the clean entry point for this ca
 
 Do **not** duplicate both iLoader and isideload source trees into that third repository. Keeping source changes in their native forks preserves upstream history and makes pull requests reviewable.
 
-Recommended public-repository files:
+Recommended files:
 
 - `README.md`
 - `docs/ARCHITECTURE.md`
