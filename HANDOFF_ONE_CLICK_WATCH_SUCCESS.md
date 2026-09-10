@@ -4,14 +4,14 @@ Date: 2026-09-10
 
 ## Objective
 
-Preserve the exact result of the Windows one-click iPhone + Apple Watch companion installation work, while keeping public productization/upstream work separate from application-specific development.
+Preserve the exact result of the Windows one-click iPhone + Apple Watch companion installation work, and prepare the generic capability for a clean public project plus upstream review without mixing application-specific code.
 
 ## Repository / branch
 
 - repository: `Rzbck/iloader`
 - branch: `feat/watch-companion-support-20260909`
 - physically validated iLoader application commit: `70f37e9b4afc659ab44ec1944c034093f4cda416`
-- this branch may now contain later documentation-only commits; always verify current HEAD before new source changes.
+- later commits on this branch may be documentation-only; always verify current HEAD before source changes.
 
 Matching backend used by the validated build:
 
@@ -31,16 +31,14 @@ The one-click path was validated on real hardware:
 
 Do not conflate this with build-only or CI-only evidence.
 
-## Generic implementation areas
-
-The working path spans both repositories.
+## Generic implementation split
 
 ### iLoader
 
 - pins the matching patched isideload revision;
 - preserves the selected usbmux transport/device context;
 - supports the companion-device connection/install path required after the iPhone installation;
-- CI was adjusted so slash-named feature branches build.
+- CI supports slash-named feature branches.
 
 ### isideload
 
@@ -71,7 +69,23 @@ Read:
 
 `docs/WATCH_COMPANION_PORTING_NOTES.md`
 
-That document is the preferred starting point for a new publication/upstream-review conversation. Use the older `HANDOFF.md` only when the investigation chronology is needed.
+That document is the preferred starting point for a new publication/upstream-review conversation. Use the older `HANDOFF.md` only when investigation chronology is needed.
+
+## Dedicated public repository
+
+The user wants a separate public repository as the clean entry point for this capability. It should contain documentation, architecture, compatibility/testing notes, security guidance and links to the real source branches/future upstream PRs.
+
+Do **not** duplicate both iLoader and isideload source trees into that third repository. Keeping source changes in their native forks preserves upstream history and makes pull requests reviewable.
+
+Recommended public-repository files:
+
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `docs/COMPATIBILITY.md`
+- `docs/TESTING.md`
+- `docs/UPSTREAM.md`
+- `SECURITY.md`
+- `LICENSE`
 
 ## Upstream/review plan
 
@@ -86,4 +100,4 @@ That document is the preferred starting point for a new publication/upstream-rev
 
 ## Next step
 
-Create/use a dedicated public-project conversation for cleanup and upstream preparation. It must begin by reading this handoff, the clean porting notes, and the matching isideload handoff/docs, then verifying GitHub state before any source change.
+Create/use a dedicated Apple Watch sideloading/publication conversation. It must begin by reading this handoff, the clean porting notes, and the matching isideload handoff/docs, then verify GitHub state before any source change.
