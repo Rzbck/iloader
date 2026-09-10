@@ -1,96 +1,89 @@
 # HANDOFF — iLoader one-click Apple Watch companion install physically validated
 
-Date: 2026-09-09
+Date: 2026-09-10
 
 ## Objective
 
-Record the final exact Windows iLoader build and the physical iPhone + Apple Watch result for the embedded Watch companion installation chantier.
+Preserve the exact result of the Windows one-click iPhone + Apple Watch companion installation work, while keeping public productization/upstream work separate from application-specific development.
 
 ## Repository / branch
 
 - repository: `Rzbck/iloader`
-- local worktree: `E:\_Project\IOS APP\_Tools\iloader-watch\iloader`
 - branch: `feat/watch-companion-support-20260909`
-- physically validated iLoader code SHA: `88ca24bbb6fd028f4f180a5f28a5683fba10e7f5`
-- commit: `build(watch): pin proxy-per-forward backend`
-- pinned isideload SHA: `9d43554571360cb27c701efbe1fbd1f5456769ae`
+- physically validated iLoader application commit: `70f37e9b4afc659ab44ec1944c034093f4cda416`
+- this branch may now contain later documentation-only commits; always verify current HEAD before new source changes.
 
-This file is a final physical-validation supplement. The documentation commit that adds this file is NOT the code SHA of the tested Windows installer.
+Matching backend used by the validated build:
 
-## Exact CI / artifact
+- repository: `Rzbck/isideload`
+- branch: `feat/watch-companion-support-20260909`
+- pinned backend revision in the physically validated iLoader build: `f7b9f3da570edd6824c29680545e710846d07df5`
 
-Workflow run:
+## Physical result
 
-`34406032515`
+The one-click path was validated on real hardware:
 
-The first Windows attempt failed only after the iLoader application had successfully compiled, while Tauri attempted to download WiX:
+- the iPhone IPA installs;
+- the iPhone app launches;
+- the embedded Apple Watch companion is discovered/provisioned/signed;
+- the paired Watch receives the app;
+- the Watch app installs and launches physically.
 
-`An existing connection was forcibly closed by the remote host. (os error 10054)`
+Do not conflate this with build-only or CI-only evidence.
 
-This was an external packaging/download failure, not a Watch code compile failure.
+## Generic implementation areas
 
-The failed jobs were rerun on the SAME exact iLoader SHA and Windows completed successfully, including `Upload Windows EXE`.
+The working path spans both repositories.
 
-Exact Windows artifact:
+### iLoader
 
-- name: `windows-exe`;
-- artifact ID: `10125812841`;
-- artifact ZIP digest: `sha256:739826aa9404bda38d666f6e10c7e0b1690b7d63918053d40e0f16bf5672da74`;
-- setup path: `E:\_Project\IOS APP\_Tools\iloader-watch\artifacts\88ca24bbb6fd028f4f180a5f28a5683fba10e7f5\nsis\iloader_2.3.1_x64-setup.exe`;
-- local setup SHA-256: `4FE492056689602C9F02A35763959A14E11A522562825990C579C9390A74AEB9`.
+- pins the matching patched isideload revision;
+- preserves the selected usbmux transport/device context;
+- supports the companion-device connection/install path required after the iPhone installation;
+- CI was adjusted so slash-named feature branches build.
 
-## Regression IPA used
+### isideload
 
-The final test intentionally reused the same previously known-good application IPA so only the tooling path changed:
+- discovers nested app-ID-bearing bundles in the IPA;
+- rewrites companion/bundle relationships coherently when sideload signing changes identifiers;
+- provisions/signs the Watch bundle explicitly;
+- includes the paired Watch in provisioning where required;
+- handles watchOS platform/profile selection in the validated flow;
+- preserves capability-aware provisioning including HealthKit-related bundles.
 
-`WatchSensorLab-companion-unsigned-f539fe4105df.ipa`
+## Public/project separation
 
-## Physical result — SUCCESS
+The Watch Tracker application and its Health/GPS/activity data are not part of this project and must not be copied into a public Watch-sideloading repository.
 
-The user physically confirmed the exact build above now works end to end:
+Public-facing work should be application-agnostic. Remove or generalize:
 
-- iPhone application installs successfully;
-- Apple Watch companion installs successfully;
-- Watch Sensor Lab works correctly on the real Apple Watch;
-- the one-click iLoader iPhone + Watch path is physically validated for this IPA.
+- local Windows paths;
+- tracker-specific bundle identifiers;
+- physical device identifiers;
+- temporary diagnostic artifacts;
+- investigation comments that do not explain a permanent invariant.
 
-This is real hardware validation, not merely a successful build/CI result.
+Never commit certificates, private keys, provisioning profiles or Apple credentials.
 
-## Final blocker and progression
+## Clean publication entry point
 
-The immediately preceding exact build could already install the iPhone app and reach the Watch, but failed after accepted Watch trust/pairing while forwarding `com.apple.mobile.installation_proxy`:
+Read:
 
-`Failed to forward Apple Watch installation proxy`
+`docs/WATCH_COMPANION_PORTING_NOTES.md`
 
-`device socket io failed`
+That document is the preferred starting point for a new publication/upstream-review conversation. Use the older `HANDOFF.md` only when the investigation chronology is needed.
 
-The final isideload backend changed CompanionProxy lifetime to match the working pymobiledevice3 model: a fresh `com.apple.companion_proxy` service connection is used for each forwarding start/stop command instead of keeping one persistent socket through multiple forwards.
+## Upstream/review plan
 
-With iLoader `88ca24b...` pinning isideload `9d435545...`, the physical test succeeded. This strongly identifies persistent CompanionProxy reuse as the final transport-lifetime blocker.
-
-Earlier iLoader transport work remains valid: `DeviceInfo.id` / exact usbmux transport selection is preserved instead of resolving only by UDID. That fix was physically insufficient by itself but remains a correctness improvement and should not be reverted.
-
-## Important history to preserve
-
-- initial official iLoader path rewrote the iPhone bundle ID but not the Watch companion relationship;
-- isideload gained nested `Watch/*.app` bundle rewrite/provisioning/signing;
-- Watch registration and Watch-specific developer-services request routing were added;
-- explicit Watch signing was added;
-- direct Watch `streaming_zip_conduit` installation succeeded via Python and proved the signing/provisioning chain could work;
-- automatic one-click direct Watch install was then added to isideload;
-- stale/persistent CompanionProxy use was progressively isolated by the physical pairing and installation_proxy failures;
-- fresh CompanionProxy per forward produced the final end-to-end success.
-
-Do not return to the disproved profile-platform assumption and do not restart the unusable Watch syslog investigation.
-
-## Validation boundary
-
-Physically validated only for the exact chain recorded above and the known-good `f539fe...` IPA.
-
-The new tracker/product application branch is a separate validation target and must be built/tested independently.
+1. verify both feature-branch HEADs and CI state;
+2. compare each branch with its current upstream-compatible base;
+3. extract the minimal generic patch series, keeping the known-good revisions as regression references;
+4. sanitize docs/examples;
+5. prepare the backend/isideload review first;
+6. prepare the corresponding iLoader integration review second;
+7. open pull requests as review requests;
+8. do not merge into `main`, publish a release/crate, or delete historical branches without explicit approval.
 
 ## Next step
 
-Keep this exact iLoader installed while testing the application chantier in `Rzbck/ios-godot-lab`, branch `feat/watch-sensor-tracker-recorder-20260909`.
-
-Do not merge to `main`, publish a release, or change the installer identity without explicit user approval.
+Create/use a dedicated public-project conversation for cleanup and upstream preparation. It must begin by reading this handoff, the clean porting notes, and the matching isideload handoff/docs, then verifying GitHub state before any source change.
