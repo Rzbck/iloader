@@ -74,6 +74,8 @@ Recommended files: `README.md`, `docs/ARCHITECTURE.md`, `docs/COMPATIBILITY.md`,
 7. open pull requests as review requests;
 8. do not merge into `main`, publish a release/crate, or delete historical branches without explicit approval.
 
-## Next step
+## Next conversation handoff
 
-Create/use a dedicated Apple Watch sideloading/publication conversation. It must begin by reading this handoff, the clean porting notes, and the matching isideload handoff/docs, then verify GitHub state before any source change.
+A dedicated Apple Watch sideloading/publication conversation must begin by reading this file, `docs/WATCH_COMPANION_PORTING_NOTES.md`, and the matching isideload branch HANDOFF/docs. Then verify GitHub branch HEADs and CI before modifying source.
+
+The goal is cleanup/productization/upstream review of an already-working generic capability, not further Watch Tracker application development.
