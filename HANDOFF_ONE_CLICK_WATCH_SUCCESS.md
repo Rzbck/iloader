@@ -21,13 +21,7 @@ Matching backend used by the validated build:
 
 ## Physical result
 
-The one-click path was validated on real hardware:
-
-- the iPhone IPA installs;
-- the iPhone app launches;
-- the embedded Apple Watch companion is discovered, provisioned and signed;
-- the paired Watch receives the app;
-- the Watch app installs and launches physically.
+The one-click path was validated on real hardware: the iPhone IPA installs and launches, and its embedded Apple Watch companion is discovered, provisioned, signed, delivered to the paired Watch, installed and launched physically.
 
 Do not conflate this with build-only or CI-only evidence.
 
@@ -65,17 +59,9 @@ Read `docs/WATCH_COMPANION_PORTING_NOTES.md` first. Use the older `HANDOFF.md` o
 
 The user wants a separate public repository as the clean entry point for this capability. It should contain documentation, architecture, compatibility/testing notes, security guidance and links to the real source branches/future upstream PRs.
 
-Do **not** duplicate both iLoader and isideload source trees into that third repository. Keeping source changes in their native forks preserves upstream history and makes pull requests reviewable.
+Do not duplicate both iLoader and isideload source trees into that third repository. Keeping source changes in their native forks preserves upstream history and makes pull requests reviewable.
 
-Recommended files:
-
-- `README.md`
-- `docs/ARCHITECTURE.md`
-- `docs/COMPATIBILITY.md`
-- `docs/TESTING.md`
-- `docs/UPSTREAM.md`
-- `SECURITY.md`
-- `LICENSE`
+Recommended files: `README.md`, `docs/ARCHITECTURE.md`, `docs/COMPATIBILITY.md`, `docs/TESTING.md`, `docs/UPSTREAM.md`, `SECURITY.md`, and `LICENSE`.
 
 ## Upstream/review plan
 
