@@ -11,6 +11,10 @@ on:
   release:
     types: [published]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
+
 jobs:
   build:
     permissions:
@@ -43,17 +47,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Cache Rust and bun dependencies
+      - name: Cache Cargo dependencies
         uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
-            node_modules
-          key: ${{ matrix.platform }}-iloader-${{ hashFiles('**/Cargo.lock', 'package-lock.json') }}
+          key: ${{ matrix.platform }}-iloader-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-iloader-
+            ${{ matrix.platform }}-iloader-cargo-
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -129,62 +131,70 @@ jobs:
             --wait --verbose
           xcrun stapler staple "$DMG_PATH"
 
-      - name: Upload macOS DMG
+      - name: Upload manual macOS candidate
         uses: actions/upload-artifact@v7
-        if: matrix.platform == 'macos-latest'
+        if: github.event_name == 'workflow_dispatch' && matrix.platform == 'macos-latest'
         with:
           name: macos-dmg-universal
           path: ${{ github.workspace }}/src-tauri/target/**/release/bundle/**/*.dmg
+          retention-days: 2
 
-      - name: Upload Linux DEB
+      - name: Upload manual Linux DEB candidate
         uses: actions/upload-artifact@v7
-        if: matrix.platform == 'ubuntu-22.04' && matrix.args == '--bundles deb'
+        if: github.event_name == 'workflow_dispatch' && matrix.platform == 'ubuntu-22.04' && matrix.args == '--bundles deb'
         with:
           name: linux-deb
           path: ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.deb
+          retention-days: 2
 
-      - name: Upload Linux RPM
+      - name: Upload manual Linux RPM candidate
         uses: actions/upload-artifact@v7
-        if: matrix.platform == 'ubuntu-22.04' && matrix.args == '--bundles rpm'
+        if: github.event_name == 'workflow_dispatch' && matrix.platform == 'ubuntu-22.04' && matrix.args == '--bundles rpm'
         with:
           name: linux-rpm
           path: ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.rpm
+          retention-days: 2
 
-      - name: Upload Linux AppImage
+      - name: Upload manual Linux AppImage candidate
         uses: actions/upload-artifact@v7
-        if: matrix.platform == 'ubuntu-22.04' && matrix.args == '--bundles appimage'
+        if: github.event_name == 'workflow_dispatch' && matrix.platform == 'ubuntu-22.04' && matrix.args == '--bundles appimage'
         with:
           name: linux-appimage
           path: ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.AppImage
+          retention-days: 2
 
-      - name: Upload Linux DEB (ARM)
+      - name: Upload manual Linux DEB ARM candidate
         uses: actions/upload-artifact@v7
-        if: matrix.platform == 'ubuntu-22.04-arm' && matrix.args == '--bundles deb'
+        if: github.event_name == 'workflow_dispatch' && matrix.platform == 'ubuntu-22.04-arm' && matrix.args == '--bundles deb'
         with:
           name: linux-deb-arm
           path: ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.deb
+          retention-days: 2
 
-      - name: Upload Linux RPM (ARM)
+      - name: Upload manual Linux RPM ARM candidate
         uses: actions/upload-artifact@v7
-        if: matrix.platform == 'ubuntu-22.04-arm' && matrix.args == '--bundles rpm'
+        if: github.event_name == 'workflow_dispatch' && matrix.platform == 'ubuntu-22.04-arm' && matrix.args == '--bundles rpm'
         with:
           name: linux-rpm-arm
           path: ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.rpm
+          retention-days: 2
 
-      - name: Upload Linux AppImage (ARM)
+      - name: Upload manual Linux AppImage ARM candidate
         uses: actions/upload-artifact@v7
-        if: matrix.platform == 'ubuntu-22.04-arm' && matrix.args == '--bundles appimage'
+        if: github.event_name == 'workflow_dispatch' && matrix.platform == 'ubuntu-22.04-arm' && matrix.args == '--bundles appimage'
         with:
           name: linux-appimage-arm
           path: ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.AppImage
+          retention-days: 2
 
-      - name: Upload Windows EXE
+      - name: Upload manual Windows candidate
         uses: actions/upload-artifact@v7
-        if: matrix.platform == 'windows-latest'
+        if: github.event_name == 'workflow_dispatch' && matrix.platform == 'windows-latest'
         with:
           name: windows-exe
           path: |
             ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.exe
+          retention-days: 2
 
   mark-latest:
     needs: build
