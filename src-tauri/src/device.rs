@@ -9,6 +9,7 @@ use idevice::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use tokio_util::sync::CancellationToken;
+use tracing::{info, warn};
 
 use crate::{error::AppError, pairing::pairing_file};
 
@@ -31,6 +32,61 @@ pub struct DeviceInfoWithPairing {
 
 pub type DeviceInfoMutex = Mutex<Option<DeviceInfoWithPairing>>;
 pub type PairingCancelToken = Mutex<Option<CancellationToken>>;
+
+async fn enable_wifi_connections(
+    device: &DeviceInfo,
+    usbmuxd: &mut UsbmuxdConnection,
+) -> Result<(), AppError> {
+    if device.connection_type != "USB" {
+        return Ok(());
+    }
+
+    let provider = get_provider_from_connection(device, usbmuxd).await?;
+    let mut pairing_file = usbmuxd.get_pair_record(&device.udid).await.map_err(|e| {
+        AppError::LockdownPairing(
+            "Failed to get pairing record while enabling Wi-Fi connections".into(),
+            e.to_string(),
+        )
+    })?;
+    pairing_file.udid = Some(device.udid.clone());
+
+    let mut lockdown_client = LockdownClient::connect(&provider).await.map_err(|e| {
+        AppError::DeviceComsWithMessage(
+            "Failed to connect to lockdown while enabling Wi-Fi connections".into(),
+            e.to_string(),
+        )
+    })?;
+
+    lockdown_client
+        .start_session(&pairing_file)
+        .await
+        .map_err(|e| {
+            AppError::DeviceComsWithMessage(
+                "Failed to start lockdown session while enabling Wi-Fi connections".into(),
+                e.to_string(),
+            )
+        })?;
+
+    lockdown_client
+        .set_value(
+            "EnableWifiConnections",
+            true.into(),
+            Some("com.apple.mobile.wireless_lockdown"),
+        )
+        .await
+        .map_err(|e| {
+            AppError::LockdownPairing(
+                "Failed to enable Wi-Fi connections".into(),
+                e.to_string(),
+            )
+        })?;
+
+    info!(
+        "Enabled wireless lockdown connections for {} ({})",
+        device.name, device.udid
+    );
+    Ok(())
+}
 
 #[tauri::command]
 pub async fn list_devices() -> Result<Vec<Result<DeviceInfo, AppError>>, AppError> {
@@ -153,6 +209,15 @@ pub async fn set_selected_device(
 
     let pairing = pairing_result?;
 
+    if let Some(selected) = device.as_ref()
+        && let Err(e) = enable_wifi_connections(selected, &mut usbmuxd).await
+    {
+        warn!(
+            "Unable to enable wireless lockdown connections for {} ({}): {}",
+            selected.name, selected.udid, e
+        );
+    }
+
     let device_with_pairing = DeviceInfoWithPairing {
         info: device.unwrap(),
         pairing,
@@ -189,20 +254,37 @@ pub async fn get_provider_from_connection(
         AppError::DeviceComsWithMessage("Failed to list devices".into(), e.to_string())
     })?;
 
-    let device = devices
-        .into_iter()
-        .find(|device| {
-            device.device_id == device_info.id && device.udid == device_info.udid
-        })
-        .ok_or_else(|| {
-            AppError::DeviceComsWithMessage(
-                "Selected device connection is no longer available".into(),
-                format!(
-                    "Expected usbmuxd device id {} for {} ({})",
-                    device_info.id, device_info.udid, device_info.connection_type
-                ),
-            )
-        })?;
+    let mut exact = None;
+    let mut same_udid = None;
+    for device in devices {
+        if device.udid != device_info.udid {
+            continue;
+        }
+        if device.device_id == device_info.id {
+            exact = Some(device);
+            break;
+        }
+        if same_udid.is_none() {
+            same_udid = Some(device);
+        }
+    }
+
+    let device = exact.or(same_udid).ok_or_else(|| {
+        AppError::DeviceComsWithMessage(
+            "Selected device connection is no longer available".into(),
+            format!(
+                "No usbmuxd connection is available for {} ({})",
+                device_info.udid, device_info.connection_type
+            ),
+        )
+    })?;
+
+    if device.device_id != device_info.id {
+        info!(
+            "Device {} changed usbmuxd connection id {} -> {}; continuing on the same UDID",
+            device_info.udid, device_info.id, device.device_id
+        );
+    }
 
     let provider = device.to_provider(UsbmuxdAddr::from_env_var().unwrap(), "iloader");
     Ok(provider)
