@@ -10,7 +10,7 @@ import { AppError } from "./errors";
 export type DeviceInfo = {
   name: string;
   id: number;
-  uuid: string;
+  udid: string;
   connectionType: "USB" | "Network" | "Unknown";
   version: string;
 };
@@ -111,13 +111,18 @@ export const Device = ({
         setDevices(devices);
         if (selectedDevice) {
           const stillAvailable = devices.find(
-            (d) => d.id === selectedDevice.id,
+            (d) => d.udid === selectedDevice.udid,
           );
           if (!stillAvailable) {
             selectDevice(null);
+          } else if (
+            stillAvailable.id !== selectedDevice.id ||
+            stillAvailable.connectionType !== selectedDevice.connectionType
+          ) {
+            selectDevice(stillAvailable);
           }
         }
-        if (devices.length > 0) {
+        if (!selectedDevice && devices.length > 0) {
           const devicesWithPairing = await Promise.all(
             devices.map(async (device) => {
               const hasPairing = await invoke<boolean>("has_stored_rppairing", {
@@ -154,7 +159,7 @@ export const Device = ({
       },
       error: (e) => err(t("device.unable_load_devices_prefix"), e),
     });
-  }, [setDevices, selectDevice, t]);
+  }, [selectedDevice, selectDevice, t]);
   useEffect(() => {
     loadDevices();
   }, [loadDevices]);
@@ -203,10 +208,11 @@ export const Device = ({
           <div>{t("device.no_devices_found_period")}</div>
         )}
         {devices.map((device) => {
-          const isActive = selectedDevice?.id === device.id;
+          const isActive =
+            selectedDevice?.udid === device.udid && selectedDevice?.id === device.id;
           return (
             <button
-              key={device.id}
+              key={`${device.udid}:${device.id}`}
               className={"device-card card" + (isActive ? " active" : "")}
               onClick={() => selectDevice(device)}
               disabled={waitingToPair !== null}
