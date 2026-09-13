@@ -483,6 +483,7 @@ pub async fn get_provider_from_connection(
         );
         return Ok(DeviceProvider::Tcp(TcpProvider {
             addr,
+            scope_id: None,
             pairing_file,
             label: "iloader".to_string(),
         }));
