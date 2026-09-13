@@ -123,7 +123,10 @@ async fn discover_wifi_addresses() -> Result<Vec<Ipv4Addr>, AppError> {
     Ok(addresses.into_iter().collect())
 }
 
-async fn inspect_wifi_device(addr: Ipv4Addr) -> Result<DeviceInfo, AppError> {
+async fn inspect_wifi_device(
+    addr: Ipv4Addr,
+    pairing_file: &PairingFile,
+) -> Result<DeviceInfo, AppError> {
     let stream = tokio::time::timeout(
         WIFI_CONNECT_TIMEOUT,
         tokio::net::TcpStream::connect((addr, LockdownClient::LOCKDOWND_PORT)),
@@ -144,6 +147,16 @@ async fn inspect_wifi_device(addr: Ipv4Addr) -> Result<DeviceInfo, AppError> {
 
     let idevice = Idevice::new(Box::new(stream), "iloader".to_string());
     let mut lockdown_client = LockdownClient::new(idevice);
+
+    lockdown_client
+        .start_session(pairing_file)
+        .await
+        .map_err(|e| {
+            AppError::DeviceComsWithMessage(
+                format!("Failed to authenticate Wi-Fi device {addr}"),
+                e.to_string(),
+            )
+        })?;
 
     let udid_value = lockdown_client
         .get_value(Some("UniqueDeviceID"), None)
@@ -181,7 +194,7 @@ async fn inspect_wifi_device(addr: Ipv4Addr) -> Result<DeviceInfo, AppError> {
             )
         })?;
     let version = version_value.as_string().ok_or_else(|| {
-        AppError::DeviceComs("Wi-Fi device version was not a string".into())
+        AppError::DeviceComs("Product version was not a string".into())
     })?;
 
     Ok(DeviceInfo {
@@ -250,8 +263,33 @@ async fn enable_wifi_connections(
 }
 
 #[tauri::command]
-pub async fn list_devices() -> Result<Vec<Result<DeviceInfo, AppError>>, AppError> {
+pub async fn list_devices(
+    device_state: State<'_, DeviceInfoMutex>,
+) -> Result<Vec<Result<DeviceInfo, AppError>>, AppError> {
     let mut usbmuxd = get_usbmuxd().await?;
+
+    let selected_udid = {
+        let guard = device_state.lock().unwrap();
+        guard.as_ref().map(|selected| selected.info.udid.clone())
+    };
+
+    let selected_pairing = if let Some(udid) = selected_udid.as_deref() {
+        match usbmuxd.get_pair_record(udid).await {
+            Ok(mut pairing_file) => {
+                pairing_file.udid = Some(udid.to_string());
+                Some(pairing_file)
+            }
+            Err(e) => {
+                warn!(
+                    "Unable to load pairing record for selected Wi-Fi handoff device {}: {}",
+                    udid, e
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     let devs = usbmuxd.get_devices().await.map_err(|e| {
         AppError::Usbmuxd("Failed to list devices from usbmuxd".into(), e.to_string())
@@ -340,26 +378,35 @@ pub async fn list_devices() -> Result<Vec<Result<DeviceInfo, AppError>>, AppErro
         })
         .collect();
 
-    match discover_wifi_addresses().await {
-        Ok(addresses) => {
-            for address in addresses {
-                match inspect_wifi_device(address).await {
-                    Ok(device) => {
-                        if network_udids.insert(device.udid.clone()) {
-                            info!(
-                                "Discovered Wi-Fi device {} ({}) at {}",
-                                device.name, device.udid, address
-                            );
-                            device_infos.push(Ok(device));
+    if let Some(pairing_file) = selected_pairing.as_ref() {
+        match discover_wifi_addresses().await {
+            Ok(addresses) => {
+                for address in addresses {
+                    match inspect_wifi_device(address, pairing_file).await {
+                        Ok(device) => {
+                            if selected_udid.as_deref() != Some(device.udid.as_str()) {
+                                warn!(
+                                    "Ignoring authenticated Wi-Fi candidate {address}: UDID does not match selected device"
+                                );
+                                continue;
+                            }
+
+                            if network_udids.insert(device.udid.clone()) {
+                                info!(
+                                    "Discovered authenticated Wi-Fi device {} ({}) at {}",
+                                    device.name, device.udid, address
+                                );
+                                device_infos.push(Ok(device));
+                            }
                         }
-                    }
-                    Err(e) => {
-                        warn!("Ignoring mDNS candidate {address}: {e}");
+                        Err(e) => {
+                            warn!("Ignoring mDNS candidate {address}: {e}");
+                        }
                     }
                 }
             }
+            Err(e) => warn!("Unable to discover Wi-Fi devices with Bonjour/mDNS: {e}"),
         }
-        Err(e) => warn!("Unable to discover Wi-Fi devices with Bonjour/mDNS: {e}"),
     }
 
     Ok(device_infos)
