@@ -5,9 +5,14 @@ use crate::{
     error::AppError,
     operation::Operation,
     pairing::{get_sidestore_info, place_file},
+    wifi_rsd::open_rsd_tunnel,
 };
-use isideload::sideload::{application::SpecialApp, sideloader::Sideloader};
+use isideload::{
+    dev::{device_type::DeveloperDeviceType, devices::DevicesApi},
+    sideload::{application::SpecialApp, install::install_app_rsd, sideloader::Sideloader},
+};
 use tauri::{AppHandle, Manager, State, Window};
+use tracing::{info, warn};
 
 pub type SideloaderMutex = Mutex<Option<Sideloader>>;
 
@@ -41,6 +46,7 @@ impl Drop for SideloaderGuard<'_> {
 }
 
 pub async fn sideload(
+    handle: &AppHandle,
     device_state: State<'_, DeviceInfoMutex>,
     sideloader_state: State<'_, SideloaderMutex>,
     app_path: String,
@@ -53,9 +59,58 @@ pub async fn sideload(
         }
     };
 
-    let provider = get_provider(&device.info).await?;
-
     let mut sideloader = SideloaderGuard::take(&sideloader_state)?;
+
+    if device.info.connection_type == "Network" && device.info.network_address.is_some() {
+        info!("Installing {} over RemotePairing/RSD", device.info.udid);
+
+        let (mut rsd_provider, mut handshake) = open_rsd_tunnel(handle, &device.info).await?;
+
+        let team = sideloader.get_mut().get_team().await?;
+
+        sideloader
+            .get_mut()
+            .get_dev_session()
+            .ensure_device_registered(
+                &team,
+                &device.info.name,
+                &device.info.udid,
+                None::<DeveloperDeviceType>,
+            )
+            .await?;
+
+        let (signed_app_path, special) = sideloader
+            .get_mut()
+            .sign_app(
+                app_path.clone().into(),
+                Some(team),
+                false,
+                None::<fn(f32) -> std::future::Ready<()>>,
+            )
+            .await?;
+
+        install_app_rsd(
+            &mut rsd_provider,
+            &mut handshake,
+            &signed_app_path,
+            |progress| {
+                info!("Installing over RSD: {}%", progress);
+            },
+        )
+        .await?;
+
+        if let Err(e) = tokio::fs::remove_dir_all(&signed_app_path).await {
+            warn!(
+                "Failed to remove temporary RSD-signed app directory {}: {}",
+                signed_app_path.display(),
+                e
+            );
+        }
+
+        return Ok(special);
+    }
+
+    let provider = get_provider(&device.info).await?;
 
     let special = sideloader
         .get_mut()
@@ -81,7 +136,13 @@ pub async fn sideload_operation(
     op.start("install")?;
     op.fail_if_err(
         "install",
-        sideload(device_state, sideloader_state, app_path).await,
+        sideload(
+            window.app_handle(),
+            device_state,
+            sideloader_state,
+            app_path,
+        )
+        .await,
     )?;
     op.complete("install")?;
     Ok(())
@@ -140,6 +201,7 @@ pub async fn install_sidestore_operation(
     op.fail_if_err(
         "install",
         sideload(
+            &handle,
             device_state,
             sideloader_state,
             dest.to_string_lossy().to_string(),

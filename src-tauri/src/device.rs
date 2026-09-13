@@ -20,7 +20,7 @@ use tauri::{AppHandle, State};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use crate::{error::AppError, pairing::pairing_file};
+use crate::{error::AppError, pairing::pairing_file, wifi_rsd::bootstrap_remote_pairing};
 
 const MOBDEV2_SERVICE: &str = "_apple-mobdev2._tcp.local.";
 const WIFI_DISCOVERY_TIMEOUT: Duration = Duration::from_millis(1500);
@@ -167,9 +167,9 @@ async fn inspect_wifi_device(
                 e.to_string(),
             )
         })?;
-    let udid = udid_value.as_string().ok_or_else(|| {
-        AppError::DeviceComs("Wi-Fi device UDID was not a string".into())
-    })?;
+    let udid = udid_value
+        .as_string()
+        .ok_or_else(|| AppError::DeviceComs("Wi-Fi device UDID was not a string".into()))?;
 
     let name_value = lockdown_client
         .get_value(Some("DeviceName"), None)
@@ -180,9 +180,9 @@ async fn inspect_wifi_device(
                 e.to_string(),
             )
         })?;
-    let name = name_value.as_string().ok_or_else(|| {
-        AppError::DeviceComs("Wi-Fi device name was not a string".into())
-    })?;
+    let name = name_value
+        .as_string()
+        .ok_or_else(|| AppError::DeviceComs("Wi-Fi device name was not a string".into()))?;
 
     let version_value = lockdown_client
         .get_value(Some("ProductVersion"), None)
@@ -193,9 +193,9 @@ async fn inspect_wifi_device(
                 e.to_string(),
             )
         })?;
-    let version = version_value.as_string().ok_or_else(|| {
-        AppError::DeviceComs("Product version was not a string".into())
-    })?;
+    let version = version_value
+        .as_string()
+        .ok_or_else(|| AppError::DeviceComs("Product version was not a string".into()))?;
 
     Ok(DeviceInfo {
         name: name.to_string(),
@@ -249,10 +249,7 @@ async fn enable_wifi_connections(
         )
         .await
         .map_err(|e| {
-            AppError::LockdownPairing(
-                "Failed to enable Wi-Fi connections".into(),
-                e.to_string(),
-            )
+            AppError::LockdownPairing("Failed to enable Wi-Fi connections".into(), e.to_string())
         })?;
 
     info!(
@@ -477,6 +474,27 @@ pub async fn set_selected_device(
         );
     }
 
+    if let Some(selected) = device.as_ref()
+        && selected.connection_type == "USB"
+    {
+        match get_provider_from_connection(selected, &mut usbmuxd).await {
+            Ok(provider) => {
+                if let Err(e) = bootstrap_remote_pairing(&app, selected, &provider).await {
+                    warn!(
+                        "Unable to prepare RemotePairing for {} ({}): {}",
+                        selected.name, selected.udid, e
+                    );
+                }
+            }
+            Err(e) => {
+                warn!(
+                    "Unable to reopen USB provider for RemotePairing bootstrap on {} ({}): {}",
+                    selected.name, selected.udid, e
+                );
+            }
+        }
+    }
+
     let device_with_pairing = DeviceInfoWithPairing {
         info: device.unwrap(),
         pairing,
@@ -511,17 +529,17 @@ pub async fn get_provider_from_connection(
 ) -> Result<DeviceProvider, AppError> {
     if let Some(network_address) = device_info.network_address.as_deref() {
         let addr = network_address.parse::<IpAddr>().map_err(|e| {
-            AppError::DeviceComsWithMessage(
-                "Invalid Wi-Fi device address".into(),
-                e.to_string(),
-            )
+            AppError::DeviceComsWithMessage("Invalid Wi-Fi device address".into(), e.to_string())
         })?;
-        let mut pairing_file = connection.get_pair_record(&device_info.udid).await.map_err(|e| {
-            AppError::LockdownPairing(
-                "Failed to get pairing record for Wi-Fi device".into(),
-                e.to_string(),
-            )
-        })?;
+        let mut pairing_file = connection
+            .get_pair_record(&device_info.udid)
+            .await
+            .map_err(|e| {
+                AppError::LockdownPairing(
+                    "Failed to get pairing record for Wi-Fi device".into(),
+                    e.to_string(),
+                )
+            })?;
         pairing_file.udid = Some(device_info.udid.clone());
 
         info!(
