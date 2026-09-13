@@ -23,7 +23,7 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 idevice = { version = "0.1.57", features = ["usbmuxd", "house_arrest", "afc", "core_device_proxy", "remote_pairing", "tcp", "tunnel_tcp_stack", "xpc", "rsd", "pair"] }
-isideload = { version = "0.3.17", features = ["fs-storage"], git = "https://github.com/Rzbck/isideload", package = "isideload", rev = "a24a1a0722f0e9e9912c12e44e8f5d338272dea7" }
+isideload = { version = "0.3.17", features = ["fs-storage"], git = "https://github.com/Rzbck/isideload", package = "isideload", rev = "37fb1264a21f304d3775d56a3c3c66af335e2241" }
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
 tauri-plugin-store = "2"
 futures = "0.3.31"
