@@ -110,9 +110,12 @@ export const Device = ({
 
         setDevices(devices);
         if (selectedDevice) {
-          const stillAvailable = devices.find(
-            (d) => d.udid === selectedDevice.udid,
+          const exactConnection = devices.find(
+            (d) => d.udid === selectedDevice.udid && d.id === selectedDevice.id,
           );
+          const stillAvailable =
+            exactConnection ??
+            devices.find((d) => d.udid === selectedDevice.udid);
           if (!stillAvailable) {
             selectDevice(null);
           } else if (
