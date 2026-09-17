@@ -189,6 +189,25 @@ pub async fn install_sidestore_operation(
     nightly: bool,
     live_container: bool,
 ) -> Result<(), AppError> {
+    Box::pin(install_sidestore_operation_impl(
+        handle,
+        window,
+        device_state,
+        sideloader_state,
+        nightly,
+        live_container,
+    ))
+    .await
+}
+
+async fn install_sidestore_operation_impl(
+    handle: AppHandle,
+    window: Window,
+    device_state: State<'_, DeviceInfoMutex>,
+    sideloader_state: State<'_, SideloaderMutex>,
+    nightly: bool,
+    live_container: bool,
+) -> Result<(), AppError> {
     let op = Operation::new("install_sidestore".to_string(), &window);
     op.start("download")?;
     // TODO: Cache & check version to avoid re-downloading
