@@ -4,8 +4,15 @@ use crate::{
     device::{DeviceInfoMutex, get_provider, get_provider_from_connection, get_usbmuxd},
     error::AppError,
     operation::Operation,
-    pairing::{get_sidestore_info, place_file},
+    pairing::{PairingAppInfo, get_sidestore_info, place_file},
     wifi_rsd::open_rsd_tunnel,
+};
+use idevice::{
+    afc::opcode::AfcFopenMode,
+    house_arrest::HouseArrestClient,
+    installation_proxy::InstallationProxyClient,
+    rsd::RsdHandshake,
+    tcp::handle::AdapterHandle,
 };
 use isideload::{
     dev::{device_type::DeveloperDeviceType, devices::DevicesApi},
@@ -123,6 +130,102 @@ pub async fn sideload(
         .await?;
 
     Ok(special)
+}
+
+async fn get_sidestore_info_rsd(
+    provider: &mut AdapterHandle,
+    handshake: &mut RsdHandshake,
+    live_container: bool,
+) -> Result<Option<PairingAppInfo>, AppError> {
+    let mut installation_proxy = InstallationProxyClient::connect_rsd(provider, handshake)
+        .await
+        .map_err(|e| {
+            AppError::DeviceComsWithMessage(
+                "Failed to connect to installation proxy over RSD".into(),
+                e.to_string(),
+            )
+        })?;
+
+    let installed_apps = installation_proxy
+        .get_apps(Some("User"), None)
+        .await
+        .map_err(|e| {
+            AppError::DeviceComsWithMessage(
+                "Failed to get installed apps over RSD".into(),
+                e.to_string(),
+            )
+        })?;
+
+    for (bundle_id, app) in installed_apps {
+        let name = app
+            .as_dictionary()
+            .and_then(|x| x.get("CFBundleDisplayName").and_then(|x| x.as_string()))
+            .ok_or(AppError::Misc("Failed to parse installed apps".to_string()))?;
+
+        if name == "SideStore" || (live_container && name == "LiveContainer") {
+            let path = if name == "LiveContainer" {
+                "SideStore/Documents/ALTPairingFile.mobiledevicepairing"
+            } else {
+                "ALTPairingFile.mobiledevicepairing"
+            };
+
+            return Ok(Some(PairingAppInfo {
+                name: name.to_string(),
+                bundle_id,
+                path: path.to_string(),
+            }));
+        }
+    }
+
+    Ok(None)
+}
+
+async fn place_file_rsd(
+    pairing: Vec<u8>,
+    provider: &mut AdapterHandle,
+    handshake: &mut RsdHandshake,
+    bundle_id: String,
+    path: String,
+) -> Result<(), AppError> {
+    let house_arrest_client = HouseArrestClient::connect_rsd(provider, handshake)
+        .await
+        .map_err(|e| {
+            AppError::HouseArrest(
+                "Failed to connect to house arrest over RSD".into(),
+                e.to_string(),
+            )
+        })?;
+
+    let mut afc_client = house_arrest_client
+        .vend_documents(bundle_id)
+        .await
+        .map_err(|e| AppError::HouseArrest("Failed to vend documents".into(), e.to_string()))?;
+
+    afc_client
+        .mk_dir(format!(
+            "/Documents/{}",
+            path.rsplit_once('/').map(|x| x.0).unwrap_or("")
+        ))
+        .await
+        .map_err(|e| {
+            AppError::HouseArrest("Failed to create Documents directory".into(), e.to_string())
+        })?;
+
+    let mut file = afc_client
+        .open(format!("/Documents/{}", path), AfcFopenMode::Wr)
+        .await
+        .map_err(|e| {
+            AppError::HouseArrest("Failed to open file on device".into(), e.to_string())
+        })?;
+
+    file.write_entire(&pairing)
+        .await
+        .map_err(|e| AppError::HouseArrest("Failed to write pairing file".into(), e.to_string()))?;
+    file.close()
+        .await
+        .map_err(|e| AppError::HouseArrest("Failed to close file".into(), e.to_string()))?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -243,30 +346,69 @@ async fn install_sidestore_operation_impl(
         .await,
     )?;
     op.move_on("install", "pairing")?;
-    let sidestore_info = op.fail_if_err(
-        "pairing",
-        get_sidestore_info(&device.info, live_container).await,
-    )?;
-    if let Some(info) = sidestore_info {
-        let mut usbmuxd = op.fail_if_err("pairing", get_usbmuxd().await)?;
 
-        let provider = op.fail_if_err(
-            "pairing",
-            get_provider_from_connection(&device.info, &mut usbmuxd).await,
-        )?;
-
-        op.fail_if_err(
-            "pairing",
-            place_file(device.pairing, &provider, info.bundle_id, info.path).await,
-        )?;
-    } else {
-        return op.fail(
-            "pairing",
-            AppError::HouseArrest(
-                "SideStore's not found".into(),
-                "The device did not report SideStore's bundle ID as installed".into(),
-            ),
+    if device.info.connection_type == "Network" && device.info.network_address.is_some() {
+        info!(
+            "Placing SideStore pairing file over RemotePairing/RSD for {}",
+            device.info.udid
         );
+
+        let (mut rsd_provider, mut handshake) =
+            op.fail_if_err("pairing", open_rsd_tunnel(&handle, &device.info).await)?;
+
+        let sidestore_info = op.fail_if_err(
+            "pairing",
+            get_sidestore_info_rsd(&mut rsd_provider, &mut handshake, live_container).await,
+        )?;
+
+        if let Some(info) = sidestore_info {
+            op.fail_if_err(
+                "pairing",
+                place_file_rsd(
+                    device.pairing,
+                    &mut rsd_provider,
+                    &mut handshake,
+                    info.bundle_id,
+                    info.path,
+                )
+                .await,
+            )?;
+        } else {
+            return op.fail(
+                "pairing",
+                AppError::HouseArrest(
+                    "SideStore's not found".into(),
+                    "The device did not report SideStore's bundle ID as installed".into(),
+                ),
+            );
+        }
+    } else {
+        let sidestore_info = op.fail_if_err(
+            "pairing",
+            get_sidestore_info(&device.info, live_container).await,
+        )?;
+
+        if let Some(info) = sidestore_info {
+            let mut usbmuxd = op.fail_if_err("pairing", get_usbmuxd().await)?;
+
+            let provider = op.fail_if_err(
+                "pairing",
+                get_provider_from_connection(&device.info, &mut usbmuxd).await,
+            )?;
+
+            op.fail_if_err(
+                "pairing",
+                place_file(device.pairing, &provider, info.bundle_id, info.path).await,
+            )?;
+        } else {
+            return op.fail(
+                "pairing",
+                AppError::HouseArrest(
+                    "SideStore's not found".into(),
+                    "The device did not report SideStore's bundle ID as installed".into(),
+                ),
+            );
+        }
     }
 
     op.complete("pairing")?;
