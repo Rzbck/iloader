@@ -8,6 +8,7 @@ use crate::{
     wifi_rsd::open_rsd_tunnel,
 };
 use idevice::{
+    RsdService,
     afc::opcode::AfcFopenMode,
     house_arrest::HouseArrestClient,
     installation_proxy::InstallationProxyClient,
